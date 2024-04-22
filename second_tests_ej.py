@@ -117,4 +117,20 @@ data['Negative_Returns'] = (data['SP500_Returns'] < 0).astype(int)
 
 # Granger Causality Test
 print("Granger Causality Test Results (Yield Curve predicting Negative S&P 500 Returns):")
-gc_results = grangercausalitytests(data[['Negative_Returns', 'Yield_Curve']], maxlag=30, verbose=True)  # Using 30 days lag
+gc_results = grangercausalitytests(data[['Negative_Returns', 'Yield_Curve']], maxlag=180, verbose=True)  # Using 180 days lag
+#A Granger causality test with a 180-day lag examines whether the entire past 180 days of the yield curve data can predict today's 
+# value of the economic indicator. Essentially, it checks if knowing the past 180 days of the yield curve gives statistically significant 
+# information about today's economic activity beyond what would be known with fewer past days' data
+
+# save to a csv file
+data.to_csv('yield_curve_sp500_data.csv')
+# Extract p-values from Granger causality test results
+p_values = []
+for lag, result in gc_results.items():
+    p_values.append(result[0]['ssr_ftest'][1])
+
+# Create a DataFrame for p-values
+p_values_df = pd.DataFrame({'Lag': list(gc_results.keys()), 'P_Value': p_values})
+
+# Save p-values to a CSV file
+p_values_df.to_csv('granger_causality_p_values.csv', index=False)
