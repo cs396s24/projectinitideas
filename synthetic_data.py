@@ -3,24 +3,37 @@ import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 
-np.random.seed(42)  # for reproducibility
+# Set a seed for the random number generator to ensure the results are reproducible
+np.random.seed(42)
 
-# Number of data points
+# Define the number of data points to simulate
 N = 1000
 
-# Simulating confounders
-federal_funds_rate = np.random.normal(2.5, 0.5, N)  # mean = 2.5%, std = 0.5%
-unemployment_rate = np.random.normal(5.0, 1.0, N)  # mean = 5%, std = 1%
+# Simulate the 'Federal Funds Rate', a confounding variable, using a normal distribution
+# The mean is set at 2.5% (typical mid-range value), and standard deviation is 0.5% (reasonable fluctuation)
+federal_funds_rate = np.random.normal(2.5, 0.5, N)
 
-# Treatment variable
-yield_curve_inversion = np.random.binomial(1, 0.2, N)  # 20% chance of inversion
+# Simulate the 'Unemployment Rate', another confounding variable, using a normal distribution
+# A mean of 5% is a typical value for many economies, and a standard deviation of 1% reflects normal variability
+unemployment_rate = np.random.normal(5.0, 1.0, N)
 
-# Mediators influenced by both the treatment and confounders
+# Simulate the 'Yield Curve Inversion' treatment variable as a binary (0 or 1) outcome
+# The binomial distribution is used with a probability of 0.2, indicating a 20% chance of inversion occurring
+yield_curve_inversion = np.random.binomial(1, 0.2, N)
+
+# Simulate 'VIX', a mediator variable, influenced by the treatment and the 'Federal Funds Rate'
+# It's a linear function of the treatment and one confounder, with added random noise for variability
 VIX = 20 + 10 * yield_curve_inversion + 0.2 * federal_funds_rate + np.random.normal(0, 5, N)
+
+# Simulate 'BCI', another mediator, influenced by the treatment and the 'Unemployment Rate'
+# The relationship includes a negative influence of yield curve inversion and a smaller effect of unemployment rate
 BCI = 95 - 5 * yield_curve_inversion + 0.1 * unemployment_rate + np.random.normal(0, 2, N)
+
+# Simulate 'CCI', similar to 'BCI', but with a different sensitivity to the yield curve inversion
 CCI = 95 - 3 * yield_curve_inversion + 0.1 * unemployment_rate + np.random.normal(0, 2, N)
 
-# Outcome variable with interactions
+# Simulate 'GDP Growth', the outcome variable, as a complex function of all the above variables
+# It includes direct effects, an interaction term between yield curve inversion and VIX, and random noise
 GDP_growth = 3 - 1 * yield_curve_inversion + 0.5 * VIX - 0.05 * BCI + 0.05 * CCI + \
              0.1 * yield_curve_inversion * VIX + np.random.normal(0, 0.5, N)
 
