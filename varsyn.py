@@ -93,7 +93,7 @@ for series_name, series_id in series_ids.items():
         data.index = data.index + pd.offsets.MonthEnd(0)
         if series_freq[series_name] == "daily":
             data = data.interpolate(method='linear')
-            data = data.resample('ME').mean()
+            data = data.resample('M').mean()
         data = 1 + data.pct_change()
         df[series_name] = data.ffill()
 
@@ -111,27 +111,6 @@ for column in df.columns:
 
 print(df.head())
 print(adf_results)
-
-# Granger causality tests for each variable against real_gdp
-max_lag = 12  # Define the maximum number of lags to test
-granger_results = {}
-for col in df.columns:
-    if col != 'real_gdp':
-        result = grangercausalitytests(df[['real_gdp', col]], max_lag, verbose=False)
-        p_values = [round(result[i+1][0]['ssr_ftest'][1], 4) for i in range(max_lag)]
-        granger_results[col] = p_values
-        print(f'Granger causality test results for {col} causing real_gdp: {p_values}')
-
-        # Plotting Granger causality results
-        plt.figure(figsize=(10, 6))
-        plt.plot(range(1, max_lag + 1), p_values, marker='o')
-        plt.axhline(y=0.05, color='r', linestyle='--')
-        plt.title(f'Granger Causality Test p-values\n{col} causing real_gdp')
-        plt.xlabel('Lag')
-        plt.ylabel('p-value')
-        plt.xticks(range(1, max_lag + 1))
-        plt.grid(True)
-        plt.show()
 
 # Fit the VAR model
 model = VAR(df)
@@ -157,3 +136,24 @@ for column in df.columns:
     plt.axvline(x=df.index[-1], color='r', linestyle='--')
 plt.legend()
 plt.show()
+
+# Granger causality tests for each variable against real_gdp on synthetic data
+max_lag = 12  # Define the maximum number of lags to test
+granger_results_synthetic = {}
+for col in combined_df.columns:
+    if col != 'real_gdp':
+        result = grangercausalitytests(combined_df[['real_gdp', col]], max_lag, verbose=False)
+        p_values = [round(result[i+1][0]['ssr_ftest'][1], 4) for i in range(max_lag)]
+        granger_results_synthetic[col] = p_values
+        print(f'Granger causality test results for {col} causing real_gdp (synthetic): {p_values}')
+
+        # Plotting Granger causality results
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, max_lag + 1), p_values, marker='o')
+        plt.axhline(y=0.05, color='r', linestyle='--')
+        plt.title(f'Granger Causality Test p-values\n{col} causing real_gdp (synthetic)')
+        plt.xlabel('Lag')
+        plt.ylabel('p-value')
+        plt.xticks(range(1, max_lag + 1))
+        plt.grid(True)
+        plt.show()
