@@ -4,13 +4,16 @@ from fredapi import Fred
 from statsmodels.tsa.api import VAR
 from statsmodels.tsa.stattools import adfuller, grangercausalitytests
 import matplotlib.pyplot as plt
+from copulas.multivariate import GaussianMultivariate
+from ctgan import CTGAN
 
-# Your preprocessing script
+# FRED API key
 fred = Fred(api_key='2762cecd3d02ff4b96df9a6049d8daf4')
 
 start_date = '1992-01-01'
 end_date = '2020-01-31'
 
+# Define the series IDs
 series_ids = {
     'yield_curve': 'T10Y2Y',
     'real_gdp': 'external source',
@@ -38,8 +41,10 @@ series_freq = {
     'consumer_confidence': 'monthly',
 }
 
+# Create an empty DataFrame to store the data
 df = pd.DataFrame()
 
+# Load and preprocess the data
 for series_name, series_id in series_ids.items():
     if series_name == 'real_gdp':
         file_path = "US-Monthly-GDP-History-Data.xlsx"
@@ -71,7 +76,7 @@ for series_name, series_id in series_ids.items():
     if series_name == 'yield_curve':
         data = data.interpolate(method='linear')
         data = data.apply(lambda x: 1 if x <= 0 else 0)
-        data = data.resample('ME').max()
+        data = data.resample('M').max()
         conditions = [(data.shift(i).fillna(0) == 0) for i in range(1, 24 + 1)]
         combined_condition = pd.concat(conditions, axis=1).all(axis=1)
         positive_values_condition = (data == 1)
@@ -158,70 +163,6 @@ for col in combined_df.columns:
         plt.grid(True)
         plt.show()
 
-
-import pandas as pd
-import numpy as np
-from statsmodels.tsa.api import VAR
-from statsmodels.tsa.stattools import grangercausalitytests
-import matplotlib.pyplot as plt
-
-# Assuming df is your preprocessed dataframe with the true data
-# Fitting the VAR model
-model = VAR(df)
-results = model.fit(maxlags=15, ic='aic')
-
-# Generate synthetic data
-forecast_steps = 100  # Number of steps to forecast
-forecast = results.forecast(y=df.values[-results.k_ar:], steps=forecast_steps)
-
-# Add Gaussian noise to the forecasted data
-noise = np.random.normal(loc=0, scale=np.std(forecast, axis=0), size=forecast.shape)
-synthetic_data = forecast + noise
-
-# Convert synthetic data to a DataFrame
-forecast_dates = pd.date_range(start=df.index[-1], periods=forecast_steps + 1, freq='M')[1:]
-synthetic_df = pd.DataFrame(synthetic_data, index=forecast_dates, columns=df.columns)
-
-# Combine true and synthetic data for Granger causality testing
-combined_df = pd.concat([df, synthetic_df])
-
-# Granger causality tests on synthetic data
-maxlag = 12
-causality_results = {}
-
-for col in combined_df.columns:
-    if col != 'real_gdp':
-        test_result = grangercausalitytests(combined_df[['real_gdp', col]], maxlag=maxlag, verbose=False)
-        causality_results[col] = [round(test_result[i+1][0]['ssr_ftest'][1], 4) for i in range(maxlag)]
-
-# Display Granger causality results
-for key, value in causality_results.items():
-    print(f"Granger causality test results for {key} causing real_gdp: {value}")
-
-# Visualize the synthetic data vs true data
-plt.figure(figsize=(12, 8))
-for col in synthetic_df.columns:
-    plt.plot(combined_df.index, combined_df[col], label=f'{col} (True and Synthetic)')
-plt.legend()
-plt.title('True and Synthetic Data')
-plt.show()
-
-
-#########
-
-
-import pandas as pd
-from copulas.multivariate import GaussianMultivariate
-from sdv.tabular import CopulaGAN
-from sdv.tabular import GaussianCopula
-import numpy as np
-from statsmodels.tsa.api import VAR
-from statsmodels.tsa.stattools import grangercausalitytests
-import matplotlib.pyplot as plt
-
-# Load your data
-df = pd.read_csv('your_data.csv', index_col=0, parse_dates=True)
-
 # Fit the Gaussian Copula model
 gc = GaussianMultivariate()
 gc.fit(df)
@@ -232,39 +173,47 @@ synthetic_data_gc = gc.sample(num_rows=df.shape[0])
 # Convert synthetic data to DataFrame
 synthetic_df_gc = pd.DataFrame(synthetic_data_gc, columns=df.columns, index=df.index)
 
+# Add Gaussian noise to the synthetic data
+noise = np.random.normal(loc=0, scale=0.1, size=synthetic_df_gc.shape)
+synthetic_df_gc_noisy = synthetic_df_gc + noise
+
+# Fit the CTGAN model
+ctgan = CTGAN(epochs=500)
+ctgan.fit(df)
+
+# Generate synthetic data
+synthetic_data_gan = ctgan.sample(df.shape[0])
+
+# Convert synthetic data to DataFrame
+synthetic_df_gan = pd.DataFrame(synthetic_data_gan, columns=df.columns, index=df.index)
+
+# Clean the synthetic data
+synthetic_df_gc.replace([np.inf, -np.inf], np.nan, inplace=True)
+synthetic_df_gc.dropna(inplace=True)
+
+synthetic_df_gc_noisy.replace([np.inf, -np.inf], np.nan, inplace=True)
+synthetic_df_gc_noisy.dropna(inplace=True)
+
+synthetic_df_gan.replace([np.inf, -np.inf], np.nan, inplace=True)
+synthetic_df_gan.dropna(inplace=True)
+
 # Visualize the synthetic data vs true data
 plt.figure(figsize=(12, 8))
 for col in synthetic_df_gc.columns:
     plt.plot(df.index, df[col], label=f'{col} (True)')
-    plt.plot(synthetic_df_gc.index, synthetic_df_gc[col], label=f'{col} (Synthetic)')
+    plt.plot(synthetic_df_gc.index, synthetic_df_gc[col], label=f'{col} (Gaussian Copula Synthetic)')
 plt.legend()
-plt.title('True and Synthetic Data (Gaussian Copula)')
+plt.title('True and Gaussian Copula Synthetic Data')
 plt.show()
-
-
-# Add Gaussian noise to the synthetic data
-noise = np.random.normal(loc=0, scale=0.1, size=synthetic_df_gc.shape)
-synthetic_df_gc_noisy = synthetic_df_gc + noise
 
 # Visualize the noisy synthetic data vs true data
 plt.figure(figsize=(12, 8))
 for col in synthetic_df_gc_noisy.columns:
     plt.plot(df.index, df[col], label=f'{col} (True)')
-    plt.plot(synthetic_df_gc_noisy.index, synthetic_df_gc_noisy[col], label=f'{col} (Noisy Synthetic)')
+    plt.plot(synthetic_df_gc_noisy.index, synthetic_df_gc_noisy[col], label=f'{col} (Noisy Gaussian Copula Synthetic)')
 plt.legend()
-plt.title('True and Noisy Synthetic Data (Gaussian Copula)')
+plt.title('True and Noisy Gaussian Copula Synthetic Data')
 plt.show()
-
-
-# Fit the CopulaGAN model
-copula_gan = CopulaGAN()
-copula_gan.fit(df)
-
-# Generate synthetic data
-synthetic_data_gan = copula_gan.sample(num_rows=df.shape[0])
-
-# Convert synthetic data to DataFrame
-synthetic_df_gan = pd.DataFrame(synthetic_data_gan, columns=df.columns, index=df.index)
 
 # Visualize the GAN synthetic data vs true data
 plt.figure(figsize=(12, 8))
@@ -277,11 +226,13 @@ plt.show()
 
 def perform_granger_causality_tests(data, target='real_gdp', maxlag=12):
     causality_results = {}
+    data = data.replace([np.inf, -np.inf], np.nan).dropna()  # Add this line
     for col in data.columns:
         if col != target:
             test_result = grangercausalitytests(data[[target, col]], maxlag=maxlag, verbose=False)
             causality_results[col] = [round(test_result[i+1][0]['ssr_ftest'][1], 4) for i in range(maxlag)]
     return causality_results
+
 
 # Granger causality tests for Gaussian Copula synthetic data
 gc_causality_results = perform_granger_causality_tests(synthetic_df_gc)
@@ -302,6 +253,3 @@ for key, value in gc_noisy_causality_results.items():
 print("\nGranger Causality Test Results (GAN):")
 for key, value in gan_causality_results.items():
     print(f"{key} causing real_gdp: {value}")
-
-
-
